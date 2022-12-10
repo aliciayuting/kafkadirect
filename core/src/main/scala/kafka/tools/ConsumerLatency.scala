@@ -63,7 +63,7 @@ object ConsumerLatency {
     var latencies = Array[Double]() 
     var sendTimes = Array.fill(numMessages + warmup)(0L)
     var receiveTimes = Array.fill(numMessages + warmup)(0L)
-    var tmp = 0L
+    @volatile var tmp = 0L
     for(l <- 0 until 10) {
         for(ind <- 0 until sendTimes.size) {
             tmp = sendTimes(ind) + receiveTimes(ind)

@@ -22,7 +22,9 @@ import java.nio.ByteBuffer
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.{Collections, Optional, Properties}
+import java.util.{Collections, Optional, Properties, Arrays}
+import java.time.{Clock,Instant}
+import java.io._
 
 import com.ibm.disni.verbs.IbvMr
 import kafka.admin.{AdminUtils, RackAwareMode}
@@ -100,11 +102,25 @@ class KafkaApis(val requestChannel: RequestChannel,
   // manager for registration of RDMA producers
   val producerRdmaManager: ProducerRdmaManager = new ProducerRdmaManager(rdmaManager.rdmaPD)
 
-
-  def close() {
-    info("Shutdown complete.")
+  // log timestamps
+  val MTL = 1000000
+  var producer_request_received_tl = Array.fill(MTL)(0L)
+  @volatile var _tmp = 0L
+  var cur_log_pos = 0
+  for(l <- 0 until 10) {
+    for(ind <- 0 until MTL) {
+      _tmp = producer_request_received_tl(ind)
+    }
   }
 
+  def close() {
+    info("writing timestamp log...")
+    val prcFile = new File("prc.csv")
+    val sbw = new BufferedWriter(new FileWriter(prcFile))
+    sbw.write(producer_request_received_tl.mkString("\n"))
+    sbw.close()
+    info("Shutdown complete.")
+  }
 
   def rdmaHandle(request: RequestChannel.RdmaRequest): Unit =
   {
@@ -132,6 +148,13 @@ class KafkaApis(val requestChannel: RequestChannel,
     val position: Int = segment.position.getAndAdd(len).toInt // segment.position is atomic long. can be normal volatile long
     val buffer: ByteBuffer = segment.buffer.duplicate().position(position).limit(position+len).asInstanceOf[ByteBuffer].slice()
     val records: MemoryRecords = MemoryRecords.readableRecords(buffer)
+
+    // log server receive time
+    val now = Clock.systemUTC().instant()
+    val now_us = now.getEpochSecond()*1000000 + now.getNano()/1000
+    val seqno = position/len
+    producer_request_received_tl(seqno) = now_us
+    cur_log_pos = cur_log_pos + 1
 
     // the callback for sending a produce response
     def sendResponseCallback(responseStatus: Map[TopicPartition, PartitionResponse]) {
