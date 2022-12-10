@@ -115,9 +115,9 @@ class KafkaApis(val requestChannel: RequestChannel,
 
   def close() {
     info("writing timestamp log...")
-    producer_request_received_tl.slice(0,cur_log_pos)
-    val prcFile = new File("prc.csv")
-    val sbw = new BufferedWriter(new FileWriter(prcFile))
+    producer_request_received_tl = producer_request_received_tl.slice(0,cur_log_pos)
+    val prrFile = new File("prr.csv")
+    val sbw = new BufferedWriter(new FileWriter(prrFile))
     sbw.write(producer_request_received_tl.mkString("\n"))
     sbw.close()
     info("Shutdown complete.")
