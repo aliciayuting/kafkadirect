@@ -115,6 +115,7 @@ class KafkaApis(val requestChannel: RequestChannel,
 
   def close() {
     info("writing timestamp log...")
+    producer_request_received_tl.slice(0,cur_log_pos)
     val prcFile = new File("prc.csv")
     val sbw = new BufferedWriter(new FileWriter(prcFile))
     sbw.write(producer_request_received_tl.mkString("\n"))
