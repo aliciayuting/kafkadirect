@@ -61,8 +61,15 @@ object ConsumerLatency {
     consumer.assignment().asScala.foreach(consumer.position)
 
     var latencies = Array[Double]() 
-    var sendTimes = Array[Long]()
-    var receiveTimes = Array[Long]()
+    var sendTimes = Array.fill(numMessages + warmup)(0L)
+    var receiveTimes = Array.fill(numMessages + warmup)(0L)
+    var tmp = 0L
+    for(l <- 0 until 10) {
+        for(ind <- 0 until sendTimes.size) {
+            tmp = sendTimes(ind) + receiveTimes(ind)
+        }
+    }
+
     var receivedMessages = 0
     while(receivedMessages < numMessages + warmup) {
       val records = if (config.withRdmaConsume)
@@ -74,13 +81,16 @@ object ConsumerLatency {
       for (record <- records) {
         if (record.value != null){
           val sendTimeStamp = ByteBuffer.wrap(record.value.slice(0,8)).getLong
-          sendTimes :+= sendTimeStamp
-          receiveTimes :+= receiveTimeStamp
-          receivedMessages = receivedMessages + 1
+          if (receivedMessages < numMessages + warmup) {
+            sendTimes(receivedMessages) = sendTimeStamp
+            receiveTimes(receivedMessages) = receiveTimeStamp
+            receivedMessages = receivedMessages + 1
+          } else {
+              printf("Warning: received more messages than expected. No timestamp log for those extra messages.\n")
+          }
         }
       }
     }
-
     
     for (ind <- 0 until sendTimes.size){
       latencies :+= ( receiveTimes(ind) - sendTimes(ind) ) * 1.0
@@ -93,11 +103,11 @@ object ConsumerLatency {
     // sendTimes
     val sendTimestampfile = new File(sendTimestampFilepath)
     val sbw = new BufferedWriter(new FileWriter(sendTimestampfile))
-    sbw.write(sendTimes.mkString(","))
+    sbw.write(sendTimes.mkString("\n"))
     sbw.close()
     val receiveTimestampfile = new File(receiveTimestampFilepath)
     val rbw = new BufferedWriter(new FileWriter(receiveTimestampfile))
-    rbw.write(receiveTimes.mkString(","))
+    rbw.write(receiveTimes.mkString("\n"))
     rbw.close()
     /** -- Print out of latencies and throughput -- **/
     def stdDev(arr: Array[Double], 
