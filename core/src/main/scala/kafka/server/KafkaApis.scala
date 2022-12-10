@@ -154,7 +154,8 @@ class KafkaApis(val requestChannel: RequestChannel,
     val now = Clock.systemUTC().instant()
     val now_us = now.getEpochSecond()*1000000 + now.getNano()/1000
     val seqno = position/len
-    info(s"len=$len position=$position seqno=$seqno")
+    val nrec = records.numberOfRecords()
+    info(s"len=$len position=$position seqno=$seqno nrec=$nrec")
     producer_request_received_tl(seqno) = now_us
     cur_log_pos = seqno
 

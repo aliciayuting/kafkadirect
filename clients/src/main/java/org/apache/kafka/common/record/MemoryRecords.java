@@ -109,6 +109,14 @@ public class MemoryRecords extends AbstractRecords {
         return bytes;
     }
 
+    public int numberOfRecords() {
+        int nRec = 0;
+        for (RecordBatch batch : batches()) {
+            nRec += batch.countOrNull();
+        }
+        return nRec;
+    }
+
     @Override
     public ConvertedRecords<MemoryRecords> downConvert(byte toMagic, long firstOffset, Time time) {
         return RecordsUtil.downConvert(batches(), toMagic, firstOffset, time);
