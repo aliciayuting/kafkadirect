@@ -180,6 +180,7 @@ class Partition(val topicPartition: TopicPartition,
   }
 
   def flush_tl(): Unit = {
+      info(s"uhw_log_pos = $uhw_log_pos, rhw_log_pos = $rhw_log_pos")
       // uhw
       val uhwfile = new File(s"$topic.uhw.csv")
       val uhw_sbw = new BufferedWriter(new FileWriter(uhwfile))
