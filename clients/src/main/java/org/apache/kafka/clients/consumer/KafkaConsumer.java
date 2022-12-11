@@ -2209,6 +2209,7 @@ public class KafkaConsumer<K, V> implements Consumer<K, V> {
     @Override
     public void close() {
         close(Duration.ofMillis(DEFAULT_CLOSE_TIMEOUT_MS));
+        fetcher.flush_tls();
     }
 
     /**

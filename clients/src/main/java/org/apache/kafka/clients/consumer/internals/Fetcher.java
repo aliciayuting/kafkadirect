@@ -136,6 +136,12 @@ public class Fetcher<K, V> implements SubscriptionState.Listener, Closeable {
     private final ConsumerRDMAClient rdmaClient;
     private final HashMap<Integer, FetchRdmaSessionHandler> rdmaSessionHandlers;
 
+    public void flush_tls() {
+        for (Map.Entry<Integer, FetchRdmaSessionHandler> e : rdmaSessionHandlers.entrySet()) {
+            e.getValue().flush_tls(Integer.toString(e.getKey()));
+        }
+    }
+
     private final int cacheSize;
     private final int wrapAroundLimit;
     private final boolean withSlots;

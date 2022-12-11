@@ -31,9 +31,13 @@ import org.slf4j.Logger;
 
 import java.nio.ByteBuffer;
 import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.LinkedList;
 import java.util.TreeSet;
+import java.io.*;
+
+import java.time.*;
 
 
 class SlotSegment {
@@ -94,8 +98,6 @@ public class FetchRdmaSessionHandler {
             new LinkedHashMap<>(0);
 
 
-
-
     /**
      * All of the partitions which exist in the fetch request session.
      */
@@ -103,6 +105,45 @@ public class FetchRdmaSessionHandler {
             new LinkedHashMap<>(0);
 
 
+    class TimeLog {
+        private final int MTL = 1000000;
+        public long log_pos;
+        public long [] tl = new long[MTL];
+
+        public TimeLog () {
+            log_pos = 0;
+            for (int i=0;i<MTL;i++) {
+                tl[i] = 0;
+            }
+        }
+
+        public void append(long to,long ts) {
+            while (log_pos < to) {
+                tl[(int)log_pos] = ts;
+                log_pos ++;
+            }
+        }
+
+        public void flush(String filename) {
+            try {
+                BufferedWriter bw = new BufferedWriter(new FileWriter(filename));
+                for (long i=0;i<log_pos;i++) {
+                    bw.write(Long.toString(tl[(int)i])+"\n");
+                }
+                bw.close();
+            } catch (IOException ioe) {
+                // ... I'm too lazy
+            }
+        }
+    }
+
+    private HashMap<String,TimeLog> update_consumer_metadata_tls =  new HashMap<String,TimeLog>();
+
+    public void flush_tls(String broker_id) {
+        for ( Map.Entry<String,TimeLog> tle: update_consumer_metadata_tls.entrySet()) {
+            tle.getValue().flush(tle.getKey()+"."+broker_id+".ucm.csv");
+        }
+    }
 
     public FetchRdmaSessionHandler(LogContext logContext, int node, ConsumerRDMAClient rdmaClient,
                                    int fetchSize, int cacheSize, int wrapAroundLimit, boolean withSlots,
@@ -147,6 +188,7 @@ public class FetchRdmaSessionHandler {
 
     public boolean requiresUpdatePartition(TopicPartition partition, IsolationLevel isolationLevel, long nowNanos) {
         if (!sessionPartitions.containsKey(partition)) {
+            update_consumer_metadata_tls.put(partition.topic(),new TimeLog());
             sessionPartitions.put(partition, 
                                   new FetchRdmaRequestData(partition, rdmaClient, nowNanos, fetchSize,
                                                            cacheSize, wrapAroundLimit, withSlots, addressUpdateTimeoutInMs));
@@ -242,6 +284,9 @@ public class FetchRdmaSessionHandler {
         }
 
         sessionPartitions.get(partition).updateMetadata(memoryData);
+        Instant instant = Clock.systemUTC().instant();
+        long now_us = instant.getEpochSecond()*1000000 + instant.getNano()/1000;
+        update_consumer_metadata_tls.get(partition.topic()).append(memoryData.watermarkOffset,now_us);
     }
 
     public static class CompletedRdmaFetch implements Comparable<CompletedRdmaFetch> {
