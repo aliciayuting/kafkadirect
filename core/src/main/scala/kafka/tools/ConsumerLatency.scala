@@ -1,12 +1,9 @@
 package kafka.tools
 
-import java.time.Clock
-import java.time.Duration
-import java.time.Instant
 import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.io._
-import java.time.Duration
+import java.time._
 import java.util.{Arrays, Collections,Properties}
 
 import org.apache.kafka.clients.admin.NewTopic
@@ -78,17 +75,23 @@ object ConsumerLatency {
                             consumer.poll(Duration.ofMillis(timeout)).asScala
       val instant = Clock.systemUTC().instant()
       val receiveTimeStamp = instant.getEpochSecond() * 1000000 + instant.getNano()/1000
-      for (record <- records) {
-        if (record.value != null){
-          val sendTimeStamp = ByteBuffer.wrap(record.value.slice(0,8)).getLong
-          if (receivedMessages < numMessages + warmup) {
-            sendTimes(receivedMessages) = sendTimeStamp
-            receiveTimes(receivedMessages) = receiveTimeStamp
-            receivedMessages = receivedMessages + 1
-          } else {
-              printf("Warning: received more messages than expected. No timestamp log for those extra messages.\n")
+      if (records.toList.length > 0) {
+        for (record <- records) {
+          if (record.value != null){
+            val sendTimeStamp = ByteBuffer.wrap(record.value.slice(0,8)).getLong
+            if (receivedMessages < numMessages + warmup) {
+              sendTimes(receivedMessages) = sendTimeStamp
+              receiveTimes(receivedMessages) = receiveTimeStamp
+              receivedMessages = receivedMessages + 1
+            } else {
+                printf("Warning: received more messages than expected. No timestamp log for those extra messages.\n")
+            }
           }
         }
+      } else {
+          val until_ns = System.nanoTime + 100000
+          while (System.nanoTime < until_ns) {
+          }
       }
     }
     
