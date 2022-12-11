@@ -89,7 +89,7 @@ object ConsumerLatency {
           }
         }
       } else {
-          val until_ns = System.nanoTime + 100000
+          val until_ns = System.nanoTime + 10000
           while (System.nanoTime < until_ns) {
           }
       }
