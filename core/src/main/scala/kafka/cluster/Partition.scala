@@ -902,9 +902,9 @@ class Partition(val topicPartition: TopicPartition,
 
     val now = Clock.systemUTC().instant()
     val now_us = now.getEpochSecond()*1000000 + now.getNano()/1000
-    // if (rhw_log_pos != localReplica.highWatermark.messageOffset) {
-    //    warn(s"rhw_log_pos=$rhw_log_pos, messageOffset=${localReplica.highWatermark.messageOffset}")
-    // }
+    if (rhw_log_pos != localReplica.highWatermark.messageOffset) {
+        warn(s"rhw_log_pos=$rhw_log_pos, messageOffset=${localReplica.highWatermark.messageOffset}")
+    }
     /*
     for (i <- rhw_log_pos until localReplica.highWatermark.messageOffset) {
       read_high_watermark_tl(i.toInt) = now_us
