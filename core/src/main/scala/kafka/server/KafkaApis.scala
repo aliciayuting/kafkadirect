@@ -153,11 +153,11 @@ class KafkaApis(val requestChannel: RequestChannel,
     // log server receive time
     val now = Clock.systemUTC().instant()
     val now_us = now.getEpochSecond()*1000000 + now.getNano()/1000
-    val seqno = position/len
     val nrec = records.numberOfRecords()
-    info(s"len=$len position=$position seqno=$seqno nrec=$nrec")
-    producer_request_received_tl(seqno) = now_us
-    cur_log_pos = seqno
+    for (i <- 0 until nrec) {
+        producer_request_received_tl(cur_log_pos+i) = now_us
+    }
+    cur_log_pos = cur_log_pos + nrec
 
     // the callback for sending a produce response
     def sendResponseCallback(responseStatus: Map[TopicPartition, PartitionResponse]) {
