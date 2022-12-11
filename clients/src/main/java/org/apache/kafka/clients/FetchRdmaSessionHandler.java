@@ -104,44 +104,9 @@ public class FetchRdmaSessionHandler {
     private LinkedHashMap<TopicPartition, FetchRdmaRequestData> sessionPartitions =
             new LinkedHashMap<>(0);
 
-
-    class TimeLog {
-        private final int MTL = 1000000;
-        public long log_pos;
-        public long [] tl = new long[MTL];
-
-        public TimeLog () {
-            log_pos = 0;
-            for (int i=0;i<MTL;i++) {
-                tl[i] = 0;
-            }
-        }
-
-        public void append(long to,long ts) {
-            while (log_pos < to) {
-                tl[(int)log_pos] = ts;
-                log_pos ++;
-            }
-        }
-
-        public void flush(String filename) {
-            try {
-                BufferedWriter bw = new BufferedWriter(new FileWriter(filename));
-                for (long i=0;i<log_pos;i++) {
-                    bw.write(Long.toString(tl[(int)i])+"\n");
-                }
-                bw.close();
-            } catch (IOException ioe) {
-                // ... I'm too lazy
-            }
-        }
-    }
-
-    private HashMap<String,TimeLog> update_consumer_metadata_tls =  new HashMap<String,TimeLog>();
-
     public void flush_tls(String broker_id) {
-        for ( Map.Entry<String,TimeLog> tle: update_consumer_metadata_tls.entrySet()) {
-            tle.getValue().flush(tle.getKey()+"."+broker_id+".ucm.csv");
+        for (Map.Entry<TopicPartition, FetchRdmaRequestData> e:sessionPartitions.entrySet()) {
+            e.getValue().tl.flush(e.getKey().topic()+"."+broker_id+".ucm.csv");
         }
     }
 
@@ -188,7 +153,6 @@ public class FetchRdmaSessionHandler {
 
     public boolean requiresUpdatePartition(TopicPartition partition, IsolationLevel isolationLevel, long nowNanos) {
         if (!sessionPartitions.containsKey(partition)) {
-            update_consumer_metadata_tls.put(partition.topic(),new TimeLog());
             sessionPartitions.put(partition, 
                                   new FetchRdmaRequestData(partition, rdmaClient, nowNanos, fetchSize,
                                                            cacheSize, wrapAroundLimit, withSlots, addressUpdateTimeoutInMs));
@@ -284,9 +248,6 @@ public class FetchRdmaSessionHandler {
         }
 
         sessionPartitions.get(partition).updateMetadata(memoryData);
-        Instant instant = Clock.systemUTC().instant();
-        long now_us = instant.getEpochSecond()*1000000 + instant.getNano()/1000;
-        update_consumer_metadata_tls.get(partition.topic()).append(memoryData.watermarkOffset,now_us);
     }
 
     public static class CompletedRdmaFetch implements Comparable<CompletedRdmaFetch> {
@@ -371,7 +332,41 @@ public class FetchRdmaSessionHandler {
         ByteBuffer cache;
         IbvMr mr;
 
+        // Timestamp
+        class TimeLog {
+            private final int MTL = 1000000;
+            public long log_pos;
+            public long [] tl = new long[MTL];
+    
+            public TimeLog () {
+                log_pos = 0;
+                for (int i=0;i<MTL;i++) {
+                    tl[i] = 0;
+                }
+            }
+    
+            public void append(long to,long ts) {
+                while (log_pos < to) {
+                    tl[(int)log_pos] = ts;
+                    log_pos ++;
+                }
+            }
+    
+            public void flush(String filename) {
+                try {
+                    BufferedWriter bw = new BufferedWriter(new FileWriter(filename));
+                    for (long i=0;i<log_pos;i++) {
+                        bw.write(Long.toString(tl[(int)i])+"\n");
+                    }
+                    bw.close();
+                } catch (IOException ioe) {
+                    // ... I'm too lazy
+                }
+            }
+        }
 
+        public TimeLog tl = new TimeLog();
+    
         // for debugging
         private int failuresToGetRecords = 0;
         private int pendingRDMAreq = 0;
@@ -490,7 +485,9 @@ public class FetchRdmaSessionHandler {
                 }
             }
 
-
+            Instant instant = Clock.systemUTC().instant();
+            long now_us = instant.getEpochSecond()*1000000 + instant.getNano()/1000;
+            tl.append(wmoffset,now_us);
         }
 
         public boolean isReady() {
