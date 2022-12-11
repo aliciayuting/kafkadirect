@@ -114,12 +114,16 @@ class KafkaApis(val requestChannel: RequestChannel,
   }
 
   def close() {
-    info("writing timestamp log...")
+    info("writing timestamp logs...")
     producer_request_received_tl = producer_request_received_tl.slice(0,cur_log_pos)
     val prrFile = new File("prr.csv")
     val sbw = new BufferedWriter(new FileWriter(prrFile))
     sbw.write(producer_request_received_tl.mkString("\n"))
     sbw.close()
+
+    replicaManager.allPartitions.values.foreach { p =>
+        p.flush_tl()
+    }
     info("Shutdown complete.")
   }
 

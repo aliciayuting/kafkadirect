@@ -186,7 +186,8 @@ class ReplicaManager(val config: KafkaConfig,
   /* epoch of the controller that last changed the leader */
   @volatile var controllerEpoch: Int = KafkaController.InitialControllerEpoch
   private val localBrokerId = config.brokerId
-  private val allPartitions = new Pool[TopicPartition, Partition](valueFactory = Some(tp =>
+  // private val allPartitions = new Pool[TopicPartition, Partition](valueFactory = Some(tp =>
+  val allPartitions = new Pool[TopicPartition, Partition](valueFactory = Some(tp =>
     Partition(tp, time, rdmaManager, this)))
   private val replicaStateChangeLock = new Object
   val replicaFetcherManager = createReplicaFetcherManager(metrics, time, threadNamePrefix, quotaManagers.follower)

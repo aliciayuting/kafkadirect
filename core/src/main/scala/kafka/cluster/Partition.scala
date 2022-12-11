@@ -18,6 +18,9 @@ package kafka.cluster
 
 import java.util.Optional
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import java.time.{Clock, Instant}
+import java.io._
+import java.util.{Arrays}
 
 import com.yammer.metrics.core.Gauge
 import kafka.api.{ApiVersion, LeaderAndIsr, Request}
@@ -163,6 +166,24 @@ class Partition(val topicPartition: TopicPartition,
       case None =>
         false
     }
+  }
+
+  /** Timestamps **/
+  var MTL = 1000000
+  var update_high_watermark_tl = Array.fill(MTL)(0L)
+  var cur_log_pos = 0
+  @volatile var tmp = 0L
+  for (ind <- 0 until MTL) {
+      tmp = update_high_watermark_tl(ind)
+  }
+
+  def flush_tl(): Unit = {
+      val uhwfile = new File(s"$topic.uhw.csv")
+      val sbw = new BufferedWriter(new FileWriter(uhwfile))
+      val uhw = update_high_watermark_tl.slice(0,cur_log_pos)
+      sbw.write(uhw.mkString("\n"))
+      sbw.close()
+      cur_log_pos = 0
   }
 
   /**
@@ -600,6 +621,12 @@ class Partition(val topicPartition: TopicPartition,
     if (oldHighWatermark.messageOffset < newHighWatermark.messageOffset ||
       (oldHighWatermark.messageOffset == newHighWatermark.messageOffset && oldHighWatermark.onOlderSegment(newHighWatermark))) {
       leaderReplica.highWatermark = newHighWatermark
+      val now = Clock.systemUTC().instant()
+      val now_us = now.getEpochSecond()*1000000 + now.getNano()/1000
+      for (i <- cur_log_pos until leaderReplica.highWatermark.messageOffset.toInt) {
+        update_high_watermark_tl(i) = now_us
+      }
+      cur_log_pos = leaderReplica.highWatermark.messageOffset.toInt
       debug(s"High watermark updated to $newHighWatermark")
       true
     } else {
