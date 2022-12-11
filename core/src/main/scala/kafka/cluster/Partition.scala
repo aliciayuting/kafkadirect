@@ -191,7 +191,7 @@ class Partition(val topicPartition: TopicPartition,
       // rhw
       val rhwfile = new File(s"$topic.rhw.csv")
       val rhw_sbw = new BufferedWriter(new FileWriter(rhwfile))
-      val rhw = update_high_watermark_tl.slice(0,rhw_log_pos.toInt)
+      val rhw = read_high_watermark_tl.slice(0,rhw_log_pos.toInt)
       rhw_sbw.write(rhw.mkString("\n"))
       rhw_sbw.close()
       rhw_log_pos = 0
