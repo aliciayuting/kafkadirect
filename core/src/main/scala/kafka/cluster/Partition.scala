@@ -171,19 +171,30 @@ class Partition(val topicPartition: TopicPartition,
   /** Timestamps **/
   var MTL = 1000000
   var update_high_watermark_tl = Array.fill(MTL)(0L)
-  var cur_log_pos = 0
+  var uhw_log_pos = 0L
+  var read_high_watermark_tl   = Array.fill(MTL)(0L)
+  var rhw_log_pos = 0L
   @volatile var tmp = 0L
   for (ind <- 0 until MTL) {
-      tmp = update_high_watermark_tl(ind)
+      tmp = update_high_watermark_tl(ind) + read_high_watermark_tl(ind)
   }
 
   def flush_tl(): Unit = {
+      // uhw
       val uhwfile = new File(s"$topic.uhw.csv")
-      val sbw = new BufferedWriter(new FileWriter(uhwfile))
-      val uhw = update_high_watermark_tl.slice(0,cur_log_pos)
-      sbw.write(uhw.mkString("\n"))
-      sbw.close()
-      cur_log_pos = 0
+      val uhw_sbw = new BufferedWriter(new FileWriter(uhwfile))
+      val uhw = update_high_watermark_tl.slice(0,uhw_log_pos.toInt)
+      uhw_sbw.write(uhw.mkString("\n"))
+      uhw_sbw.close()
+      uhw_log_pos = 0
+
+      // rhw
+      val rhwfile = new File(s"$topic.rhw.csv")
+      val rhw_sbw = new BufferedWriter(new FileWriter(rhwfile))
+      val rhw = update_high_watermark_tl.slice(0,rhw_log_pos.toInt)
+      rhw_sbw.write(rhw.mkString("\n"))
+      rhw_sbw.close()
+      rhw_log_pos = 0
   }
 
   /**
@@ -623,10 +634,10 @@ class Partition(val topicPartition: TopicPartition,
       leaderReplica.highWatermark = newHighWatermark
       val now = Clock.systemUTC().instant()
       val now_us = now.getEpochSecond()*1000000 + now.getNano()/1000
-      for (i <- cur_log_pos until leaderReplica.highWatermark.messageOffset.toInt) {
-        update_high_watermark_tl(i) = now_us
+      for (i <- uhw_log_pos until leaderReplica.highWatermark.messageOffset) {
+        update_high_watermark_tl(i.toInt) = now_us
       }
-      cur_log_pos = leaderReplica.highWatermark.messageOffset.toInt
+      uhw_log_pos = leaderReplica.highWatermark.messageOffset
       debug(s"High watermark updated to $newHighWatermark")
       true
     } else {
@@ -888,6 +899,13 @@ class Partition(val topicPartition: TopicPartition,
         error(s"Leader does not have a local log")
         FetchDataInfo(LogOffsetMetadata.UnknownOffsetMetadata, MemoryRecords.EMPTY)
     }
+
+    val now = Clock.systemUTC().instant()
+    val now_us = now.getEpochSecond()*1000000 + now.getNano()/1000
+    for (i <- rhw_log_pos until localReplica.highWatermark.messageOffset) {
+      read_high_watermark_tl(i.toInt) = now_us
+    }
+    rhw_log_pos = localReplica.highWatermark.messageOffset
 
     LogReadInfo(
       fetchedData = fetchedData,
