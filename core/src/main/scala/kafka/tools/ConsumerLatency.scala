@@ -39,6 +39,7 @@ object ConsumerLatency {
     val warmup = config.numWarmup
     val sendTimestampFilepath = Paths.get(System.getProperty("user.dir"),"sendTimeStamps.csv").toString()  
     val receiveTimestampFilepath = Paths.get(System.getProperty("user.dir"), "receiveTimeStamps.csv").toString()
+    val eteThroughputFilepath = Paths.get(System.getProperty("user.dir"), "ete_throughput.txt").toString()
 
     def finalise() {
       consumer.commitSync()
@@ -130,9 +131,16 @@ object ConsumerLatency {
     }
     val average_latency = latencies.sum * 1.0 / (latencies.size )
     val std_latency = stdDev(latencies, average_latency)
-    val ops = 1.0 * 1000000 * numMessages / (receiveTimes.last - sendTimes.head)
+    val start_to_end_time = receiveTimes.last - sendTimes.head
+    val ops = 1.0 * 1000000 * numMessages / (start_to_end_time)
     Arrays.sort(latencies)
-    printf("\n med_latency:%.1f us,avg_latency:%.1f us,std: %.1f ,ops:%.1f ,num: %d \n".format(latencies((latencies.length * 0.5).toInt),average_latency, std_latency, ops, latencies.size))
+    val throughput = ops * messageLen / (1024 * 1024)
+    printf("\n med_latency:%.1f us,avg_latency:%.1f us,std: %.1f, ops:%.1f, throughput:%.1f, num: %d \n".format(latencies((latencies.length * 0.5).toInt),average_latency, std_latency, ops,throughput, latencies.size))
+    val ete_info = "ops=%.1f, throughput(MiB/s)=%.1f,avg_latency(us)=%.1f,std_latency=%.1f,sumTime=%d,totalTime(us)=%d,totalMsg=%d".format(ops, throughput, average_latency, std_latency, latencies.sum, start_to_end_time, latencies.size)
+    val eteThroughputfile = new File(eteThroughputFilepath)
+    val etw = new BufferedWriter(new FileWriter(eteThroughputfile))
+    etw.write(ete_info)
+    etw.close()
     finalise()
   }
 
