@@ -134,9 +134,9 @@ object ConsumerLatency {
     val start_to_end_time = receiveTimes.last - sendTimes.head
     val ops = 1.0 * 1000000 * numMessages / (start_to_end_time)
     Arrays.sort(latencies)
-    val throughput = ops * messageLen / (1024 * 1024)
+    val throughput = 1.0 * ops * messageLen / (1024 * 1024)
     printf("\n med_latency:%.1f us,avg_latency:%.1f us,std: %.1f, ops:%.1f, throughput:%.1f, num: %d \n".format(latencies((latencies.length * 0.5).toInt),average_latency, std_latency, ops,throughput, latencies.size))
-    val ete_info = "ops=%.1f, throughput(MiB/s)=%.1f,avg_latency(us)=%.1f,std_latency=%.1f,sumTime=%d,totalTime(us)=%d,totalMsg=%d".format(ops, throughput, average_latency, std_latency, latencies.sum, start_to_end_time, latencies.size)
+    val ete_info = "ops=%.1f, throughput(MiB/s)=%.1f,avg_latency(us)=%.1f,std_latency=%.1f,sumTime=%.0f,totalTime(us)=%d,totalMsg=%d".format(ops, throughput, average_latency, std_latency, latencies.sum, start_to_end_time, latencies.size)
     val eteThroughputfile = new File(eteThroughputFilepath)
     val etw = new BufferedWriter(new FileWriter(eteThroughputfile))
     etw.write(ete_info)
