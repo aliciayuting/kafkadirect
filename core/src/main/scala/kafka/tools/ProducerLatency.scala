@@ -51,7 +51,7 @@ object ProducerLatency {
       val begin = System.nanoTime
       if(begin - prevSendTime > interval){
         val message = randomBytesOfLen(random, messageLen)
-        producer.RDMAsend(new ProducerRecord[Array[Byte], Array[Byte]](topic, message))
+        producer.RDMAsend(new ProducerRecord[Array[Byte], Array[Byte]](topic, message)).get()
         val elapsed = System.nanoTime - begin
         prevSendTime = begin
         
@@ -75,7 +75,6 @@ object ProducerLatency {
     val p99 = latencies((latencies.length * 0.99).toInt)
     val p999 = latencies((latencies.length * 0.999).toInt)
     println("Producer latency: 50th = %f us, 95th = %f us, 99th = %f us, 99.9th = %f us".format(p50/ 1000.0, p95/ 1000.0, p99/ 1000.0, p999/ 1000.0))
-    println("Producer throughput: end - start %f us".format(lastAckTime/1000.0 - firstSendTime/1000.0))
     finalise()
   }
 

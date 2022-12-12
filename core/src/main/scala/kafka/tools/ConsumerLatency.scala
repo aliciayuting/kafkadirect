@@ -1,20 +1,25 @@
 package kafka.tools
 
+import java.time.Clock
+import java.time.Duration
+import java.time.Instant
 import java.nio.ByteBuffer
 import java.nio.file.Paths
 import java.io._
-import java.time._
-import java.util.{Arrays, Collections,Properties}
+import java.time.Duration
+import java.util.{Arrays, Collections,Collection,Properties}
+import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.{CommonClientConfigs,admin}
-import org.apache.kafka.clients.consumer.{ConsumerConfig, KafkaConsumer}
+import org.apache.kafka.clients.consumer.{ConsumerRebalanceListener, ConsumerConfig, KafkaConsumer}
 import org.apache.kafka.common.TopicPartition
 import kafka.utils.{CommandLineUtils}
 import org.apache.kafka.common.utils.{Exit, Utils}
 
 import scala.collection.JavaConverters._
 import scala.math._
+import scala.collection.mutable
 
 
 object ConsumerLatency {
@@ -53,21 +58,28 @@ object ConsumerLatency {
 
     val topicPartitions = consumer.partitionsFor(topic).asScala
       .map(p => new TopicPartition(p.topic(), p.partition())).asJava
-    consumer.assign(topicPartitions)
-    consumer.seekToEnd(topicPartitions)
-    consumer.assignment().asScala.foreach(consumer.position)
+    //consumer.assign(topicPartitions)
+    //consumer.seekToEnd(topicPartitions)
+    //consumer.assignment().asScala.foreach(consumer.position)
+
+    val joinGroupTimeInMs = new AtomicLong(0)
+    var joinStart = 0L
+    var joinTimeMsInSingleRound = 0L
+
+    consumer.subscribe( (List(topic)).asJava, new ConsumerRebalanceListener {
+      def onPartitionsAssigned(partitions: Collection[TopicPartition]) {
+        joinGroupTimeInMs.addAndGet(System.currentTimeMillis - joinStart)
+        joinTimeMsInSingleRound += System.currentTimeMillis - joinStart
+      }
+      def onPartitionsRevoked(partitions: Collection[TopicPartition]) {
+        joinStart = System.currentTimeMillis
+      }})
 
     var latencies = Array[Double]() 
-    var sendTimes = Array.fill(numMessages + warmup)(0L)
-    var receiveTimes = Array.fill(numMessages + warmup)(0L)
-    @volatile var tmp = 0L
-    for(l <- 0 until 10) {
-        for(ind <- 0 until sendTimes.size) {
-            tmp = sendTimes(ind) + receiveTimes(ind)
-        }
-    }
-
+    var sendTimes = Array[Long]()
+    var receiveTimes = Array[Long]()
     var receivedMessages = 0
+    var prevTime = System.nanoTime
     while(receivedMessages < numMessages + warmup) {
       val records = if (config.withRdmaConsume)
                             consumer.RDMApoll(Duration.ofMillis(timeout)).asScala
@@ -75,25 +87,19 @@ object ConsumerLatency {
                             consumer.poll(Duration.ofMillis(timeout)).asScala
       val instant = Clock.systemUTC().instant()
       val receiveTimeStamp = instant.getEpochSecond() * 1000000 + instant.getNano()/1000
-      if (records.toList.length > 0) {
-        for (record <- records) {
-          if (record.value != null){
-            val sendTimeStamp = ByteBuffer.wrap(record.value.slice(0,8)).getLong
-            if (receivedMessages < numMessages + warmup) {
-              sendTimes(receivedMessages) = sendTimeStamp
-              receiveTimes(receivedMessages) = receiveTimeStamp
-              receivedMessages = receivedMessages + 1
-            } else {
-                printf("Warning: received more messages than expected. No timestamp log for those extra messages.\n")
-            }
-          }
+      for (record <- records) {
+        if (record.value != null){
+          val sendTimeStamp = ByteBuffer.wrap(record.value.slice(0,8)).getLong
+          sendTimes :+= sendTimeStamp
+          receiveTimes :+= receiveTimeStamp
+          receivedMessages = receivedMessages + 1
         }
-      } else {
-          val until_ns = System.nanoTime + 10000
-          while (System.nanoTime < until_ns) {
-          }
       }
+      while(System.nanoTime - prevTime < config.fetchInterval ){
+      }
+      prevTime = System.nanoTime
     }
+
     
     for (ind <- 0 until sendTimes.size){
       latencies :+= ( receiveTimes(ind) - sendTimes(ind) ) * 1.0
@@ -106,11 +112,11 @@ object ConsumerLatency {
     // sendTimes
     val sendTimestampfile = new File(sendTimestampFilepath)
     val sbw = new BufferedWriter(new FileWriter(sendTimestampfile))
-    sbw.write(sendTimes.mkString("\n"))
+    sbw.write(sendTimes.mkString(","))
     sbw.close()
     val receiveTimestampfile = new File(receiveTimestampFilepath)
     val rbw = new BufferedWriter(new FileWriter(receiveTimestampfile))
-    rbw.write(receiveTimes.mkString("\n"))
+    rbw.write(receiveTimes.mkString(","))
     rbw.close()
     /** -- Print out of latencies and throughput -- **/
     def stdDev(arr: Array[Double], 
@@ -164,6 +170,12 @@ object ConsumerLatency {
       .ofType(classOf[java.lang.Integer])
       .defaultsTo(10)
     
+    val fetchIntervalOpt = parser.accepts("fetchinterval", "The amount of time(ns) to wait between fetches.")
+      .withRequiredArg
+      .describedAs("cout")
+      .ofType(classOf[java.lang.Long])
+      .defaultsTo(10000)
+    
     val saveFilepathOpt = parser.accepts("saveFilepath", "The absulute filepath to save the timestamps files.")
       .withRequiredArg
       .describedAs("filepath")
@@ -209,6 +221,7 @@ object ConsumerLatency {
     val numMessages = options.valueOf(numMessagesOpt).intValue
     val messageLen = options.valueOf(fetchSizeOpt).intValue
     val numWarmup = options.valueOf(numWarmupOpt).intValue
+    val fetchInterval = options.valueOf(fetchIntervalOpt).longValue
 
 
     consumerProps.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, options.valueOf(bootstrapServersOpt))

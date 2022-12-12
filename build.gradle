@@ -51,7 +51,7 @@ allprojects {
 
   repositories {
     mavenCentral()
-    flatDir dirs: "/home/ktaranov/Documents/disni/target/"
+    flatDir dirs: "$rootDir/../kafka_direct_dependencies/disni/target/"
   }
   
   apply plugin: 'idea'

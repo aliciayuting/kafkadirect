@@ -28,6 +28,9 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.Arrays;
+import java.time.Clock;
+import java.time.Instant;
+import java.lang.Thread;
 
 import net.sourceforge.argparse4j.inf.MutuallyExclusiveGroup;
 import org.apache.kafka.clients.producer.Callback;
@@ -139,10 +142,17 @@ public class ProducerPerformance {
                 }
 
 
-                if (payloadFilePath != null) {
-                    payload = payloadByteList.get(random.nextInt(payloadByteList.size()));
+                
+                /* CascadeComparison: encapsulating record sending time in payload to send */
+                Instant instant = Clock.systemUTC().instant();
+                long payloadTimeStamp = instant.getEpochSecond() * 1000000 + instant.getNano() / 1000; // in micro-second
+                for (int pos = 7; pos >= 0; pos--){
+                    payload[pos] = (byte)(payloadTimeStamp & 0xFF);
+                    payloadTimeStamp >>= 8;
                 }
-                record = new ProducerRecord<>(topicName, payload);
+		
+		        record = new ProducerRecord<>(topicName, payload);
+
 
                 long sendStartMs = System.currentTimeMillis();
                 Callback cb = stats.nextCompletion(sendStartMs, System.nanoTime(), payload.length, stats);
@@ -169,7 +179,7 @@ public class ProducerPerformance {
             if (!shouldPrintMetrics) {
                 producer.close();
 
-                /* print final results */
+                // /* print final results */
                 stats.printTotal();
             } else {
                 // Make sure all messages are sent before printing out the stats and the metrics
@@ -177,11 +187,11 @@ public class ProducerPerformance {
                 // expects this class to work with older versions of the client jar that don't support flush().
                 producer.flush();
 
-                /* print final results */
+                // /* print final results */
                 stats.printTotal();
 
                 /* print out metrics */
-                ToolsUtils.printMetrics(producer.metrics());
+                // ToolsUtils.printMetrics(producer.metrics());
                 producer.close();
 
             }
@@ -367,11 +377,11 @@ public class ProducerPerformance {
                 this.latencies[index] = latencyMirco;
                 this.index++;
             }
-            /* maybe report the recent perf */
-            if (time - windowStart >= reportingInterval) {
-                printWindow();
-                newWindow();
-            }
+            // /* maybe report the recent perf */
+            // if (time - windowStart >= reportingInterval) {
+            //     printWindow();
+            //     newWindow();
+            // }
         }
 
         public Callback nextCompletion(long start, long startNano, int bytes, Stats stats) {
